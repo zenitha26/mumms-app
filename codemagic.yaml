@@ -3,7 +3,7 @@ workflows:
     name: Android Release Build
     max_build_duration: 120
     environment:
-      node: 20
+      node: 22
       java: 17
     scripts:
       - name: Install npm dependencies
@@ -28,7 +28,7 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
-      node: 20
+      node: 22
       xcode: latest
       cocoapods: default
     scripts:
