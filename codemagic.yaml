@@ -56,7 +56,8 @@ workflows:
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO
     artifacts:
-      - ios/App/build/Release-iphoneos/*.app
+      - "**/build/**/*.app"
+      - "**/build/**/*.ipa"
     publishing:
       email:
         recipients:
