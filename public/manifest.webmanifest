@@ -1,0 +1,25 @@
+{
+  "name": "MUMMS - St. Benedict's College Media Member Management System",
+  "short_name": "MUMMS",
+  "description": "Media Unit member, equipment, dispatch, attendance, and asset management system.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#020806",
+  "theme_color": "#020806",
+  "icons": [
+    {
+      "src": "/media-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/media-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

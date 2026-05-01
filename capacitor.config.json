@@ -1,0 +1,27 @@
+{
+  "appId": "com.stbenedictsmediacloud.mumms",
+  "appName": "MUMMS",
+  "webDir": "dist",
+  "loggingBehavior": "debug",
+  "server": {
+    "androidScheme": "https"
+  },
+  "ios": {
+    "buildOptions": {
+      "signingStyle": "automatic"
+    }
+  },
+  "android": {
+    "buildOptions": {
+      "releaseType": "APK"
+    }
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "backgroundColor": "#020806",
+      "androidSplashResourceName": "splash",
+      "showSpinner": false
+    }
+  }
+}
