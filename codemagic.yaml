@@ -34,12 +34,21 @@ workflows:
     scripts:
       - name: Install npm dependencies
         script: npm install --legacy-peer-deps
-      - name: Build Web App & Sync to Capacitor
-        script: npm run mobile:sync
+
+      - name: Build web app
+        script: npm run build
+
+      - name: Add and sync Capacitor iOS
+        script: |
+          npx cap add ios || true
+          npx cap sync ios
+          find ios -name Podfile
+
       - name: Install CocoaPods
         script: |
           cd ios/App
           pod install
+
       - name: Build iOS project
         script: |
           cd ios/App
