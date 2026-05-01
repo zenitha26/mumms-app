@@ -36,10 +36,9 @@ workflows:
         script: npm install --legacy-peer-deps
       - name: Build web app and sync to native
         script: npm run mobile:sync
-      - name: Install CocoaPods dependencies
+      - name: Install CocoaPods
         script: |
-          cd ios/App
-          pod install
+          cd ios/App && pod install
       - name: Build iOS unsigned (For testing compilation)
         script: |
           cd ios/App
