@@ -47,18 +47,21 @@ workflows:
           npx cap sync ios
           find . -name Podfile
 
-      - name: Build iOS IPA
+      - name: Build unsigned IPA for Sideloadly
         script: |
           cd ios/App
-          xcodebuild -scheme App \
+
+          xcodebuild build \
+            -project App.xcodeproj \
+            -scheme App \
             -configuration Release \
-            -archivePath App.xcarchive archive \
+            -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO
 
-          xcodebuild -exportArchive \
-            -archivePath App.xcarchive \
-            -exportOptionsPlist ExportOptions.plist \
-            -exportPath build
+          mkdir -p build/Payload
+          cp -R ~/Library/Developer/Xcode/DerivedData/*/Build/Products/Release-iphoneos/App.app build/Payload/
+          cd build
+          zip -r App-unsigned.ipa Payload
     artifacts:
       - ios/App/build/*.ipa
     publishing:
