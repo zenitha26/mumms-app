@@ -58,6 +58,7 @@ workflows:
     artifacts:
       - "**/build/**/*.app"
       - "**/build/**/*.ipa"
+      - "**/build/**/Outputs/*.app"
     publishing:
       email:
         recipients:
