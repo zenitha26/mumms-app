@@ -1,0 +1,52 @@
+workflows:
+  android-workflow:
+    name: Android Release Build
+    max_build_duration: 120
+    environment:
+      node: 20
+      java: 17
+    scripts:
+      - name: Install npm dependencies
+        script: npm install
+      - name: Build web app and sync to native
+        script: npm run mobile:sync
+      - name: Build Android release APK
+        script: |
+          cd android
+          chmod +x ./gradlew
+          ./gradlew assembleRelease
+    artifacts:
+      - android/app/build/outputs/**/*.apk
+      - android/app/build/outputs/**/*.aab
+    publishing:
+      email:
+        recipients:
+          - your_email@example.com
+
+  ios-workflow:
+    name: iOS Release Build
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      node: 20
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install npm dependencies
+        script: npm install
+      - name: Build web app and sync to native
+        script: npm run mobile:sync
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios/App
+          pod install
+      - name: Build iOS unsigned (For testing compilation)
+        script: |
+          cd ios/App
+          xcodebuild build -workspace App.xcworkspace -scheme App -destination generic/platform=iOS -configuration Release CODE_SIGNING_ALLOWED=NO
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      email:
+        recipients:
+          - your_email@example.com
