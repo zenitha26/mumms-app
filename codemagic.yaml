@@ -7,7 +7,7 @@ workflows:
       java: 17
     scripts:
       - name: Install npm dependencies
-        script: npm install
+        script: npm install --legacy-peer-deps
       - name: Build web app and sync to native
         script: npm run mobile:sync
       - name: Build Android release APK
@@ -33,7 +33,7 @@ workflows:
       cocoapods: default
     scripts:
       - name: Install npm dependencies
-        script: npm install
+        script: npm install --legacy-peer-deps
       - name: Build web app and sync to native
         script: npm run mobile:sync
       - name: Install CocoaPods dependencies
