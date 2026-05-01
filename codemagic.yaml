@@ -47,18 +47,20 @@ workflows:
           npx cap sync ios
           find . -name Podfile
 
-      - name: Build iOS project
+      - name: Build iOS IPA
         script: |
           cd ios/App
-          xcodebuild build \
-            -project App.xcodeproj \
-            -scheme App \
-            -destination 'generic/platform=iOS' \
+          xcodebuild -scheme App \
+            -configuration Release \
+            -archivePath App.xcarchive archive \
             CODE_SIGNING_ALLOWED=NO
+
+          xcodebuild -exportArchive \
+            -archivePath App.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath build
     artifacts:
-      - "**/build/**/*.app"
-      - "**/build/**/*.ipa"
-      - "**/build/**/Outputs/*.app"
+      - ios/App/build/*.ipa
     publishing:
       email:
         recipients:
