@@ -1,35 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
-import {
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signInWithPopup,
-  signOut,
-} from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-} from "firebase/firestore";
 import InventoryManager from "./InventoryManager";
 import EquipmentDispatch from "./EquipmentDispatch";
-import { auth, db, googleProvider } from "./firebase";
 
 const rolePermissions = {
   MIC: ["dashboard", "team", "events", "attendance", "inventory", "dispatch"],
   President: ["dashboard", "team", "events", "attendance", "inventory", "dispatch"],
-  "Head of Media": ["dashboard", "team", "events", "attendance", "inventory", "dispatch"],
-  "Vice President": ["dashboard", "team", "events", "attendance", "inventory", "dispatch"],
+  "Vice President": ["dashboard", "team", "events", "attendance", "dispatch"],
   Coordinator: ["dashboard", "team", "events", "attendance", "dispatch"],
   Editor: ["dashboard", "team", "events", "attendance", "dispatch"],
   "Head of Announcing": ["dashboard", "team", "events", "attendance", "dispatch"],
@@ -70,7 +48,7 @@ const teamMembers = [
     group: "Executive Board",
   },
   {
-    name: "Master Jovel Adeesha",
+    name: "Master Jovel Adisha",
     role: "Coordinator",
     meta: "Operations Coordination",
     group: "Executive Board",
@@ -101,6 +79,12 @@ const teamMembers = [
   },
   {
     name: "Master Thashen Niklesha",
+    role: "Photographer",
+    meta: "Media Coverage",
+    group: "Photography Team",
+  },
+  {
+    name: "Master Nethula Silva",
     role: "Photographer",
     meta: "Media Coverage",
     group: "Photography Team",
@@ -144,16 +128,20 @@ const emptyEvent = {
 const normalizeText = (value = "") =>
   value.toLowerCase().replace(/rev\.|bro\.|master|f\.s\.c\.|[^a-z0-9]/g, "");
 
-const inferRoleForUser = (displayName = "", email = "") => {
-  const identity = `${displayName} ${email}`;
-  const normalizedIdentity = normalizeText(identity);
-  const match = accessMembers.find((member) => {
-    const nameParts = normalizeText(member.name);
-    return nameParts && normalizedIdentity.includes(nameParts.slice(0, Math.min(10, nameParts.length)));
-  });
-
-  return match?.accessRole || "Photographer";
-};
+// const inferRoleForUser = (displayName = "", email = "") => {
+//   const emailLower = (email || "").toLowerCase();
+//   if (emailLower.includes("revdilshan")) return "MIC";
+//   if (emailLower.includes("senitha")) return "President";
+//   if (emailLower.includes("ashen")) return "Vice President";
+//   if (emailLower.includes("jovel")) return "Coordinator";
+//   if (emailLower.includes("ovin")) return "Head of Announcing";
+//   
+//   // All other specified members are photographers
+//   const photographers = ["thisum", "dabare", "mihinula", "nethula"];
+//   if (photographers.some(p => emailLower.includes(p))) return "Photographer";
+// 
+//   return "Photographer";
+// };
 
 const getProfileMember = (profile) => {
   const identity = normalizeText(`${profile?.displayName || ""} ${profile?.email || ""}`);
@@ -165,7 +153,7 @@ const getProfileMember = (profile) => {
 
 const getMonthKey = (date = new Date()) => date.toISOString().slice(0, 7);
 
-function AuthGate({ onPreviewLogin }) {
+function AuthGate({ onLogin }) {
   const [mode, setMode] = useState("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -176,48 +164,33 @@ function AuthGate({ onPreviewLogin }) {
     setIsLoading(true);
 
     try {
-      if (mode === "signup") {
-        const credential = await createUserWithEmailAndPassword(auth, email, password);
-        const displayName = credential.user.displayName || email.split("@")[0];
-        await setDoc(doc(db, "users", credential.user.uid), {
-          id: credential.user.uid,
-          email: credential.user.email,
-          displayName,
-          role: inferRoleForUser(displayName, credential.user.email),
-          createdAt: serverTimestamp(),
-        });
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
+      const cleanEmail = email.trim();
+      const response = await fetch(`/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail, password }),
+      });
+
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        alert("සර්වර් එකෙන් නිවැරදි පිළිතුරක් ලැබුණේ නැත!");
+        return;
       }
-    } catch (error) {
-      alert(error.message);
+
+      if (data.success) {
+        localStorage.setItem('userRole', data.role);
+        localStorage.setItem('userName', data.name);
+        onLogin({ role: data.role, displayName: data.name, email: cleanEmail });
+      } else {
+        alert(data.message || "ලොගින් වීමට නොහැක!");
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleAuth = async () => {
-    setIsLoading(true);
-
-    try {
-      const credential = await signInWithPopup(auth, googleProvider);
-      await setDoc(
-        doc(db, "users", credential.user.uid),
-        {
-          id: credential.user.uid,
-          email: credential.user.email,
-          displayName: credential.user.displayName,
-          role: inferRoleForUser(credential.user.displayName, credential.user.email),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
-    } catch (error) {
-      alert(error.message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <main className="mumm-main-layout auth-layout">
@@ -262,17 +235,6 @@ function AuthGate({ onPreviewLogin }) {
           />
           <button className="btn-dispatch" disabled={isLoading} type="submit">
             {isLoading ? "CONNECTING..." : mode === "signup" ? "CREATE ACCOUNT" : "SIGN IN"}
-          </button>
-          <button className="btn-ghost full-width" disabled={isLoading} onClick={handleGoogleAuth} type="button">
-            Continue with Google
-          </button>
-          <button
-            className="btn-preview full-width"
-            disabled={isLoading}
-            onClick={onPreviewLogin}
-            type="button"
-          >
-            Preview Login - No Email Needed
           </button>
           <button
             className="link-button"
@@ -370,9 +332,8 @@ function SmartDutyAlerts({ events, notifications = [], profile }) {
         notifications: upcomingEvents.map((event, index) => ({
           id: Date.now() + index,
           title: `Duty alert: ${event.title}`,
-          body: `${event.date} at ${event.venue || "venue TBA"} - ${
-            event.assignedMembers?.length ? event.assignedMembers.join(", ") : event.dutyTeam || "duty team TBA"
-          }`,
+          body: `${event.date} at ${event.venue || "venue TBA"} - ${event.assignedMembers?.length ? event.assignedMembers.join(", ") : event.dutyTeam || "duty team TBA"
+            }`,
           schedule: { at: new Date(Date.now() + 1000 + index * 500) },
         })),
       });
@@ -383,9 +344,8 @@ function SmartDutyAlerts({ events, notifications = [], profile }) {
 
     upcomingEvents.forEach((event) => {
       new Notification(`Duty alert: ${event.title}`, {
-        body: `${event.date} at ${event.venue || "venue TBA"} - ${
-          event.assignedMembers?.length ? event.assignedMembers.join(", ") : event.dutyTeam || "duty team TBA"
-        }`,
+        body: `${event.date} at ${event.venue || "venue TBA"} - ${event.assignedMembers?.length ? event.assignedMembers.join(", ") : event.dutyTeam || "duty team TBA"
+          }`,
       });
     });
   };
@@ -446,46 +406,164 @@ function SmartDutyAlerts({ events, notifications = [], profile }) {
   );
 }
 
-function Dashboard({ counts, events, notifications, profile, role }) {
-  const statCards = [
-    { label: "Core Team", value: teamMembers.length },
-    { label: "Events", value: counts.events },
-    { label: "Event Attendance", value: counts.attendance },
-  ];
+function Dashboard({ events, profile, role }) {
+  const [myEquipment, setMyEquipment] = useState([]);
+  const [isLoadingEquip, setIsLoadingEquip] = useState(false);
+  const [logs, setLogs] = useState([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
+  const currentMemberName = profile?.displayName || profile?.email || "";
+
+  useEffect(() => {
+    const fetchMyEquipment = async () => {
+      setIsLoadingEquip(true);
+      try {
+        const response = await fetch(`/api/equipment`);
+        if (response.ok) {
+          const data = await response.json();
+          const myItems = data.filter(item => 
+            item.assignedTo === currentMemberName || 
+            item.assignedTo === profile?.email
+          );
+          setMyEquipment(myItems);
+        }
+      } catch (err) {
+        console.error("Error fetching my equipment:", err);
+      } finally {
+        setIsLoadingEquip(false);
+      }
+    };
+
+    const fetchLogs = async () => {
+      setIsLoadingLogs(true);
+      try {
+        const response = await fetch(`/api/logs`);
+        if (response.ok) {
+          const data = await response.json();
+          setLogs(data);
+        }
+      } catch (err) {
+        console.error("Error fetching logs:", err);
+      } finally {
+        setIsLoadingLogs(false);
+      }
+    };
+
+    if (currentMemberName) {
+      fetchMyEquipment();
+      fetchLogs();
+    }
+  }, [currentMemberName, profile]);
+
+  const myEvents = events.filter((event) =>
+    event.assignedMembers?.includes(currentMemberName) ||
+    event.dutyTeam?.includes(currentMemberName)
+  );
+
+  const upcomingMyEvents = myEvents.filter(e => new Date(e.date) >= new Date()).sort((a, b) => new Date(a.date) - new Date(b.date));
 
   return (
     <section className="hub-section">
       <div className="modern-grid dashboard-grid">
-        <div className="mumm-panel admin-glow">
-          <div className="panel-eyebrow">Command Center</div>
-          <h2 className="neon-title">MUMMS Dashboard</h2>
-          <p className="small-info">
-            Role-aware workspace for media operations. Your current access level
-            is <strong>{role}</strong>.
-          </p>
-          <div className="entity-list">
-            <span>UserProfile: email, display name, role</span>
-            <span>Access: current named team members and MIC</span>
-            <span>Events: manual calendar updates from May to December</span>
-            <span>Duty alerts: upcoming event reminders and missing duty details</span>
-            <span>Event Attendance: event, user, check-in, check-out</span>
-          </div>
-        </div>
-        <div className="dashboard-side-stack">
-          <div className="mumm-panel metrics-panel">
-            <div className="panel-eyebrow">Live Metrics</div>
-            <h3 className="card-title">Operations</h3>
-            <div className="metric-grid">
-              {statCards.map((card) => (
-                <div className="metric-tile" key={card.label}>
-                  <strong>{card.value}</strong>
-                  <span>{card.label}</span>
-                </div>
-              ))}
+        {/* Premium Profile Card */}
+        <div className="mumm-panel glass-card profile-premium-card">
+          <div className="profile-header">
+            <div className="profile-avatar">
+              {currentMemberName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+            </div>
+            <div className="profile-info">
+              <h2 className="profile-name">{currentMemberName}</h2>
+              <span className="profile-role-badge">{role}</span>
             </div>
           </div>
-          <SmartDutyAlerts events={events} notifications={notifications} profile={profile} />
+          
+          <div className="active-equipment-status">
+            <h4>💼 Active Equipment</h4>
+            {isLoadingEquip ? (
+              <p>Loading equipment...</p>
+            ) : myEquipment.length > 0 ? (
+              <div className="equipment-alert overdue">
+                <span>⚠️ You have {myEquipment.length} item(s) checked out: {myEquipment.map(i => i.name).join(", ")}. (Not Returned)</span>
+              </div>
+            ) : (
+              <div className="equipment-alert clear">
+                <span>No items checked out. All clear!</span>
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Upcoming Duties Timeline */}
+        <div className="mumm-panel glass-card timeline-panel">
+          <div className="panel-eyebrow">Duty Schedule</div>
+          <h3 className="neon-title">📅 Upcoming Duties</h3>
+          
+          <div className="timeline-container">
+            {upcomingMyEvents.length > 0 ? (
+              upcomingMyEvents.map((event) => (
+                <div className="timeline-item" key={event.id}>
+                  <div className="timeline-dot" />
+                  <div className="timeline-content">
+                    <span className="timeline-date">{event.date}</span>
+                    <h4 className="timeline-title">{event.title}</h4>
+                    <p className="timeline-venue">{event.venue}</p>
+                    <button className="btn-mini action-btn">Confirm Attendance</button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="empty-state">No upcoming duties assigned to you.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Role-Based Metrics */}
+        <div className="mumm-panel glass-card metrics-premium-panel">
+          <div className="panel-eyebrow">Your Metrics</div>
+          <h3 className="neon-title">Activity</h3>
+          
+          <div className="metrics-rings">
+            <div className="metric-ring-container">
+              <div className="progress-ring" style={{ '--progress': '70%' }}>
+                <span className="ring-value">{myEvents.length}</span>
+              </div>
+              <span className="ring-label">My Events</span>
+            </div>
+            
+            <div className="metric-ring-container">
+              <div className="progress-ring" style={{ '--progress': '100%' }}>
+                <span className="ring-value">{myEquipment.length}</span>
+              </div>
+              <span className="ring-label">Items Held</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Recent Activity Card */}
+        <div className="mumm-panel glass-card activity-panel" style={{ gridColumn: '1 / -1' }}>
+          <div className="panel-eyebrow">Recent Activity</div>
+          <h3 className="neon-title">Checkouts & Returns</h3>
+          
+          <div className="activity-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '15px' }}>
+            {isLoadingLogs ? (
+              <p>Loading activity...</p>
+            ) : logs.length > 0 ? (
+              logs.map((log) => (
+                <div className="activity-item" key={log._id} style={{ display: 'flex', gap: '15px', alignItems: 'center', padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
+                  <span className="activity-icon" style={{ fontSize: '1.5rem' }}>{log.returnTime ? "📥" : "📤"}</span>
+                  <div className="activity-details" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                    <strong>{log.equipmentName}</strong>
+                    <span style={{ fontSize: '0.9rem', color: 'rgba(236, 255, 246, 0.7)' }}>{log.returnTime ? "Returned" : "Checked out"} by {log.memberDetails}</span>
+                    <small style={{ fontSize: '0.75rem', color: '#00ff88' }}>{new Date(log.returnTime || log.checkoutTime).toLocaleString()}</small>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="empty-state">No recent activity found.</p>
+            )}
+          </div>
+        </div>
+
       </div>
     </section>
   );
@@ -548,61 +626,49 @@ function OurTeam() {
   );
 }
 
-function EventCalendar({ appeals, canManage, events, notifications, profile, role }) {
+function EventCalendar({ canManage, events, profile, refreshEvents }) {
   const [form, setForm] = useState(emptyEvent);
   const [editingId, setEditingId] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
 
-  const groupedEvents = calendarMonths.map((month) => ({
-    ...month,
-    events: events.filter((event) => {
-      if (!event.date) return false;
-      return new Date(`${event.date}T00:00:00`).getMonth() === month.index;
-    }),
-  }));
+  const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+  const firstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
 
-  const updateForm = (field, value) => {
-    setForm((current) => ({ ...current, [field]: value }));
-  };
+  const currentMonthEvents = events.filter((event) => {
+    if (!event.date) return false;
+    return new Date(`${event.date}T00:00:00`).getMonth() === selectedMonth;
+  });
 
-  const toggleAssignedMember = (memberName) => {
-    setForm((current) => {
-      const assignedMembers = current.assignedMembers || [];
-      const nextAssignedMembers = assignedMembers.includes(memberName)
-        ? assignedMembers.filter((name) => name !== memberName)
-        : [...assignedMembers, memberName];
+  const renderCalendarGrid = () => {
+    const year = 2026;
+    const days = daysInMonth(year, selectedMonth);
+    const startDay = firstDayOfMonth(year, selectedMonth);
+    const grid = [];
 
-      return {
-        ...current,
-        assignedMembers: nextAssignedMembers,
-        dutyTeam: nextAssignedMembers.join(", "),
-      };
-    });
-  };
+    // Fill empty days at start
+    for (let i = 0; i < startDay; i++) {
+      grid.push(<div key={`empty-${i}`} className="calendar-day empty"></div>);
+    }
 
-  const resetForm = () => {
-    setForm(emptyEvent);
-    setEditingId("");
-  };
+    // Fill actual days
+    for (let d = 1; d <= days; d++) {
+      const dateStr = `2026-${String(selectedMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const dayEvents = currentMonthEvents.filter(e => e.date === dateStr);
+      
+      grid.push(
+        <div key={d} className={`calendar-day ${dayEvents.length > 0 ? 'has-events' : ''}`}>
+          <span className="day-number">{d}</span>
+          <div className="day-events-dots">
+            {dayEvents.map((e, idx) => (
+              <div key={idx} className="event-dot" title={e.title}></div>
+            ))}
+          </div>
+        </div>
+      );
+    }
 
-  const createDutyNotifications = async (eventId, eventPayload, previousAssignedMembers = []) => {
-    const assignedMembers = (eventPayload.assignedMembers || []).filter(
-      (memberName) => !previousAssignedMembers.includes(memberName),
-    );
-    await Promise.all(
-      assignedMembers.map((memberName) =>
-        addDoc(collection(db, "duty_notifications"), {
-          eventId,
-          eventTitle: eventPayload.title,
-          eventDate: eventPayload.date,
-          memberName,
-          read: false,
-          title: `Duty assignment: ${eventPayload.title}`,
-          message: `${memberName}, you have been assigned for ${eventPayload.title} on ${eventPayload.date}. Venue: ${eventPayload.venue || "TBA"}.`,
-          createdAt: serverTimestamp(),
-        }),
-      ),
-    );
+    return grid;
   };
 
   const saveEvent = async (event) => {
@@ -616,188 +682,112 @@ function EventCalendar({ appeals, canManage, events, notifications, profile, rol
       assignedMembers,
       dutyTeam: assignedMembers.join(", "),
       createdBy: profile?.displayName || profile?.email || "Unknown user",
-      updatedAt: serverTimestamp(),
+      updatedAt: new Date(),
     };
 
     try {
       if (editingId) {
-        const previousEvent = events.find((item) => item.id === editingId);
-        await updateDoc(doc(db, "events", editingId), payload);
-        await createDutyNotifications(editingId, payload, previousEvent?.assignedMembers || []);
-      } else {
-        const eventRef = await addDoc(collection(db, "events"), {
-          ...payload,
-          createdAt: serverTimestamp(),
+        await fetch(`/api/events/${editingId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         });
-        await createDutyNotifications(eventRef.id, payload);
+      } else {
+        await fetch(`/api/events`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
       }
-      resetForm();
+      setForm(emptyEvent);
+      setEditingId("");
+      if (refreshEvents) refreshEvents();
+    } catch (err) {
+      alert("Error saving event: " + err.message);
     } finally {
       setIsSaving(false);
     }
   };
 
-  const editEvent = (event) => {
-    setEditingId(event.id);
-    setForm({
-      title: event.title || "",
-      date: event.date || emptyEvent.date,
-      venue: event.venue || "",
-      dutyTeam: event.dutyTeam || "",
-      assignedMembers: event.assignedMembers || [],
-      mic: event.mic || emptyEvent.mic,
-      status: event.status || "Planned",
-      note: event.note || "",
-    });
-  };
-
-  const removeEvent = async (eventId) => {
-    if (!canManage) return;
-    await deleteDoc(doc(db, "events", eventId));
-  };
-
   return (
     <section className="hub-section">
       <div className="modern-grid event-workspace-grid">
+        <div className="mumm-panel calendar-visual-panel">
+          <div className="panel-eyebrow">Visual Schedule</div>
+          <div className="calendar-header-nav">
+            <h3 className="neon-title">{calendarMonths.find(m => m.index === selectedMonth)?.label} 2026</h3>
+            <div className="nav-controls">
+              <button className="btn-mini" onClick={() => setSelectedMonth(m => Math.max(4, m - 1))}>←</button>
+              <button className="btn-mini" onClick={() => setSelectedMonth(m => Math.min(11, m + 1))}>→</button>
+            </div>
+          </div>
+          <div className="calendar-grid-header">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
+          </div>
+          <div className="calendar-grid-body">
+            {renderCalendarGrid()}
+          </div>
+        </div>
+
         <form className="mumm-panel member-form" onSubmit={saveEvent}>
-          <div className="panel-eyebrow">Manual Event Updates</div>
-          <h2 className="neon-title">May to December Calendar</h2>
-          <p className="small-info">
-            Add or update school media duties manually. These records also power
-            the smart duty alert system.
-          </p>
+          <div className="panel-eyebrow">{editingId ? "Update Duty" : "Add New Duty"}</div>
           <div className="form-grid">
-            <input
-              className="cyber-input"
-              disabled={!canManage}
-              onChange={(event) => updateForm("title", event.target.value)}
-              placeholder="Event title"
-              required
-              value={form.title}
-            />
-            <input
-              className="cyber-input"
-              disabled={!canManage}
-              max="2026-12-31"
-              min="2026-05-01"
-              onChange={(event) => updateForm("date", event.target.value)}
-              required
-              type="date"
-              value={form.date}
-            />
-            <input
-              className="cyber-input"
-              disabled={!canManage}
-              onChange={(event) => updateForm("venue", event.target.value)}
-              placeholder="Venue"
-              value={form.venue}
-            />
-            <input
-              className="cyber-input"
-              disabled={!canManage}
-              onChange={(event) => updateForm("dutyTeam", event.target.value)}
-              placeholder="Duty team / members"
-              value={form.dutyTeam}
-            />
-            <select
-              className="cyber-input"
-              disabled={!canManage}
-              onChange={(event) => updateForm("mic", event.target.value)}
-              value={form.mic}
-            >
-              {accessMembers.map((member) => (
-                <option key={member.name}>{member.name}</option>
-              ))}
-            </select>
-            <select
-              className="cyber-input"
-              disabled={!canManage}
-              onChange={(event) => updateForm("status", event.target.value)}
-              value={form.status}
-            >
+            <input className="cyber-input" onChange={e => setForm({...form, title: e.target.value})} placeholder="Event title" required value={form.title} />
+            <input className="cyber-input" type="date" onChange={e => setForm({...form, date: e.target.value})} required value={form.date} />
+            <input className="cyber-input" onChange={e => setForm({...form, venue: e.target.value})} placeholder="Venue" value={form.venue} />
+            <select className="cyber-input" onChange={e => setForm({...form, status: e.target.value})} value={form.status}>
               <option>Planned</option>
               <option>Confirmed</option>
               <option>Completed</option>
-              <option>Postponed</option>
             </select>
           </div>
-          <textarea
-            className="cyber-input event-note"
-            disabled={!canManage}
-            onChange={(event) => updateForm("note", event.target.value)}
-            placeholder="Duty note or reminder"
-            value={form.note}
-          />
-          <div className="assignment-picker">
-            <div className="field-label">Assign Team Members</div>
-            <div className="assignment-grid">
-              {accessMembers
-                .filter((member) => member.group !== "MIC / Mentor")
-                .map((member) => (
-                  <label className="assignment-option" key={member.name}>
-                    <input
-                      checked={(form.assignedMembers || []).includes(member.name)}
-                      disabled={!canManage}
-                      onChange={() => toggleAssignedMember(member.name)}
-                      type="checkbox"
-                    />
-                    <span>
-                      <strong>{member.name.replace("Master ", "")}</strong>
-                      <small>{member.role}</small>
-                    </span>
-                  </label>
-                ))}
-            </div>
-          </div>
-          <div className="button-row">
-            <button className="btn-dispatch" disabled={!canManage || isSaving} type="submit">
-              {isSaving ? "SAVING..." : editingId ? "UPDATE EVENT" : "ADD EVENT"}
-            </button>
-            {editingId && (
-              <button className="btn-ghost" onClick={resetForm} type="button">
-                Cancel
-              </button>
-            )}
-          </div>
-        </form>
-
-        <SmartDutyAlerts events={events} notifications={notifications} profile={profile} />
-      </div>
-
-      <div className="calendar-grid">
-        {groupedEvents.map((month) => (
-          <article className="mumm-panel calendar-month" key={month.label}>
-            <div className="calendar-month-header">
-              <h3 className="card-title">{month.label}</h3>
-              <span className="soft-pill">{month.events.length} events</span>
-            </div>
-            <div className="calendar-event-list">
-              {month.events.map((event) => (
-                <div className="calendar-event-card" key={event.id}>
-                  <div>
-                    <strong>{event.title}</strong>
-                    <span>{event.date} - {event.venue || "Venue TBA"}</span>
-                    <small>
-                      Assigned: {event.assignedMembers?.length ? event.assignedMembers.join(", ") : event.dutyTeam || "Duty team TBA"}
-                    </small>
-                    <small>MIC / Approval: {event.mic || "MIC TBA"}</small>
+          
+          <div className="members-selection" style={{ marginTop: '15px', marginBottom: '15px' }}>
+            <label style={{ color: 'rgba(236, 255, 246, 0.7)', fontSize: '0.9rem', marginBottom: '5px', display: 'block' }}>Assign Members:</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '10px' }}>
+              {teamMembers.filter(m => m.group !== "MIC / Mentor").map(member => (
+                <label key={member.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', background: 'rgba(255,255,255,0.03)', padding: '8px', borderRadius: '4px' }}>
+                  <input
+                    type="checkbox"
+                    checked={form.assignedMembers?.includes(member.name)}
+                    onChange={e => {
+                      const name = member.name;
+                      const currentAssigned = form.assignedMembers || [];
+                      if (e.target.checked) {
+                        setForm({...form, assignedMembers: [...currentAssigned, name]});
+                      } else {
+                        setForm({...form, assignedMembers: currentAssigned.filter(n => n !== name)});
+                      }
+                    }}
+                    style={{ accentColor: '#00ff88' }}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: '0.9rem' }}>{member.name.replace("Master ", "")}</span>
+                    <small style={{ fontSize: '0.75rem', color: 'rgba(236, 255, 246, 0.5)' }}>{member.role}</small>
                   </div>
-                  <div className="table-actions">
-                    <button className="btn-mini" disabled={!canManage} onClick={() => editEvent(event)} type="button">
-                      Edit
-                    </button>
-                    <button className="btn-mini danger" disabled={!canManage} onClick={() => removeEvent(event.id)} type="button">
-                      Delete
-                    </button>
-                  </div>
-                </div>
+                </label>
               ))}
-              {month.events.length === 0 && <p className="empty-month">No events yet.</p>}
             </div>
-          </article>
-        ))}
+          </div>
+          
+          <button className="btn-dispatch" disabled={isSaving} type="submit">{isSaving ? "SAVING..." : "SAVE EVENT"}</button>
+        </form>
       </div>
-      <DutyAppeals appeals={appeals} events={events} profile={profile} role={role} />
+
+      <div className="mumm-panel event-list-panel">
+        <div className="panel-eyebrow">Upcoming List</div>
+        <div className="calendar-event-list">
+          {currentMonthEvents.map(event => (
+            <div className="calendar-event-card" key={event.id}>
+              <div>
+                <strong>{event.title}</strong>
+                <span>{event.date} - {event.venue}</span>
+              </div>
+              <button className="btn-mini" onClick={() => { setEditingId(event.id); setForm(event); }}>Edit</button>
+            </div>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }
@@ -824,32 +814,39 @@ function DutyAppeals({ appeals, events, profile, role }) {
     event.preventDefault();
     if (!selectedEventId || !reason.trim() || overLimit) return;
 
-    const selectedEvent = events.find((item) => item.id === selectedEventId);
-    setIsSubmitting(true);
-    try {
-      await addDoc(collection(db, "duty_appeals"), {
-        eventId: selectedEventId,
-        eventTitle: selectedEvent?.title || "Untitled event",
-        eventDate: selectedEvent?.date || "",
-        memberName: currentMemberName,
-        memberEmail: profile?.email || "",
-        reason: reason.trim(),
-        status: "Pending",
-        monthKey: currentMonthKey,
-        createdAt: serverTimestamp(),
-      });
-      setSelectedEventId("");
-      setReason("");
-    } finally {
+        const selectedEvent = events.find((item) => item.id === selectedEventId);
+        setIsSubmitting(true);
+        try {
+          await fetch(`/api/duty_appeals`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              eventId: selectedEventId,
+              eventTitle: selectedEvent?.title || "Untitled event",
+              eventDate: selectedEvent?.date || "",
+              memberName: currentMemberName,
+              memberEmail: profile?.email || "",
+              reason: reason.trim(),
+              status: "Pending",
+              monthKey: currentMonthKey
+            })
+          });
+          setSelectedEventId("");
+          setReason("");
+        } finally {
       setIsSubmitting(false);
     }
   };
 
   const reviewAppeal = async (appeal, status) => {
-    await updateDoc(doc(db, "duty_appeals", appeal.id), {
-      status,
-      reviewedBy: profile?.displayName || profile?.email || "Approver",
-      reviewedAt: serverTimestamp(),
+    await fetch(`/api/duty_appeals/${appeal.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status,
+        reviewedBy: profile?.displayName || profile?.email || "Approver",
+        reviewedAt: new Date()
+      })
     });
   };
 
@@ -927,111 +924,115 @@ function DutyAppeals({ appeals, events, profile, role }) {
   );
 }
 
-function EventAttendance({ canManage }) {
+function EventAttendance({ events, profile }) {
+  const [selectedEventId, setSelectedEventId] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const handleAttendance = async (type) => {
+    if (!selectedEventId) {
+      alert("Please select an event first");
+      return;
+    }
+    setIsProcessing(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/attendance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: selectedEventId,
+          eventTitle: events.find(e => e.id === selectedEventId)?.title,
+          userId: profile.id,
+          userName: profile.displayName,
+          type: type, // 'check-in' or 'check-out'
+        })
+      });
+      if (!response.ok) throw new Error('Network response was not ok');
+      setMessage(`Successfully ${type === 'check-in' ? 'checked in' : 'checked out'}!`);
+    } catch (err) {
+      setMessage("Error: " + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <section className="hub-section">
       <div className="mumm-panel admin-glow">
-        <div className="panel-eyebrow">Event Attendance</div>
-        <h2 className="neon-title">Attendance Tracking</h2>
-        <p className="small-info">
-          Track check-ins and check-outs for each event duty. This keeps
-          attendance focused on events only.
-        </p>
-        <div className="entity-list">
-          <span>Fields: eventId, userId, checkInTime, checkOutTime</span>
-          <span>Firestore collection: attendance</span>
-          <span>Use with Event Calendar records for duty-based attendance</span>
+        <div className="panel-eyebrow">Live Workflow</div>
+        <h2 className="neon-title">Event Attendance</h2>
+        <p className="small-info">Track your duty participation by checking in and out of assigned events.</p>
+        
+        <div className="attendance-form">
+          <select 
+            className="cyber-input" 
+            value={selectedEventId} 
+            onChange={(e) => setSelectedEventId(e.target.value)}
+          >
+            <option value="">Select current event</option>
+            {events.filter(e => e.status !== "Completed").map(e => (
+              <option key={e.id} value={e.id}>{e.title} ({e.date})</option>
+            ))}
+          </select>
+
+          <div className="button-row" style={{ marginTop: '20px' }}>
+            <button 
+              className="btn-dispatch" 
+              disabled={isProcessing || !selectedEventId} 
+              onClick={() => handleAttendance("check-in")}
+            >
+              CHECK-IN
+            </button>
+            <button 
+              className="btn-ghost" 
+              disabled={isProcessing || !selectedEventId} 
+              onClick={() => handleAttendance("check-out")}
+            >
+              CHECK-OUT
+            </button>
+          </div>
+          {message && <p className={`status-text ${message.includes('Error') ? 'error' : 'success'}`}>{message}</p>}
         </div>
-        <button className="btn-dispatch" disabled={!canManage} type="button">
-          {canManage ? "CREATE ATTENDANCE WORKFLOW" : "VIEW ONLY"}
-        </button>
       </div>
     </section>
   );
 }
 
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [isPreviewMode, setIsPreviewMode] = useState(false);
-  const [activeSection, setActiveSection] = useState("dashboard");
-  const [appeals, setAppeals] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [notifications, setNotifications] = useState([]);
-  const [counts, setCounts] = useState({
-    events: 0,
-    attendance: 0,
+  const API_BASE = "/api";
+  const [user, setUser] = useState(() => {
+    const stored = localStorage.getItem('loggedUser');
+    return stored ? JSON.parse(stored) : null;
   });
+  const [profile, setProfile] = useState(() => {
+    const stored = localStorage.getItem('loggedUser');
+    return stored ? JSON.parse(stored) : null;
+  });
+  const [activeSection, setActiveSection] = useState("dashboard");
+  const [events, setEvents] = useState([]);
+
+
+  const fetchData = async () => {
+    try {
+      const [eventsRes, membersRes] = await Promise.all([
+        fetch(`${API_BASE}/events`),
+        fetch(`${API_BASE}/members`)
+      ]);
+
+      const eventsData = await eventsRes.json();
+      const membersData = await membersRes.json();
+
+      setEvents(eventsData.map(e => ({ ...e, id: e._id })));
+
+    } catch (err) {
+      console.error("API Fetch Error:", err);
+    }
+  };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (isPreviewMode) return;
-
-      setUser(currentUser);
-
-      if (!currentUser) {
-        setProfile(null);
-        return;
-      }
-
-      const profileRef = doc(db, "users", currentUser.uid);
-      const profileSnapshot = await getDoc(profileRef);
-
-      if (profileSnapshot.exists()) {
-        setProfile({ id: profileSnapshot.id, ...profileSnapshot.data() });
-      } else {
-        const fallbackProfile = {
-          id: currentUser.uid,
-          email: currentUser.email,
-          displayName: currentUser.displayName || currentUser.email,
-          role: inferRoleForUser(currentUser.displayName, currentUser.email),
-          createdAt: serverTimestamp(),
-        };
-        await setDoc(profileRef, fallbackProfile);
-        setProfile(fallbackProfile);
-      }
-    });
-
-    return unsubscribe;
-  }, [isPreviewMode]);
-
-  useEffect(() => {
-    const collections = ["attendance"];
-    const unsubscribers = collections.map((collectionName) =>
-      onSnapshot(collection(db, collectionName), (snapshot) => {
-        setCounts((current) => ({ ...current, [collectionName]: snapshot.size }));
-      }),
-    );
-
-    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
-  }, []);
-
-  useEffect(() => {
-    const eventsQuery = query(collection(db, "events"), orderBy("date"));
-    const unsubscribe = onSnapshot(eventsQuery, (snapshot) => {
-      const nextEvents = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
-      setEvents(nextEvents);
-      setCounts((current) => ({ ...current, events: nextEvents.length }));
-    });
-
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "duty_notifications"), (snapshot) => {
-      setNotifications(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
-    });
-
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "duty_appeals"), (snapshot) => {
-      setAppeals(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })));
-    });
-
-    return unsubscribe;
-  }, []);
+    if (user) fetchData();
+  }, [user]);
 
   const role = profile?.role || "Photographer";
   const accessibleNav = useMemo(
@@ -1045,35 +1046,19 @@ export default function App() {
     }
   }, [activeSection, role]);
 
-  const handlePreviewLogin = () => {
-    setIsPreviewMode(true);
-    setUser({
-      uid: "preview-president",
-      email: "preview@sbcmediahub.local",
-      displayName: "Preview President",
-    });
-    setProfile({
-      id: "preview-president",
-      email: "preview@sbcmediahub.local",
-      displayName: "Preview President",
-      role: "President",
-    });
-  };
-
-  const handleSignOut = async () => {
-    if (isPreviewMode) {
-      setIsPreviewMode(false);
-      setUser(null);
-      setProfile(null);
-      setActiveSection("dashboard");
-      return;
-    }
-
-    await signOut(auth);
+  const handleSignOut = () => {
+    localStorage.removeItem('loggedUser');
+    setUser(null);
+    setProfile(null);
+    setActiveSection("dashboard");
   };
 
   if (!user) {
-    return <AuthGate onPreviewLogin={handlePreviewLogin} />;
+    return <AuthGate onLogin={(userData) => {
+      localStorage.setItem('loggedUser', JSON.stringify(userData));
+      setUser(userData);
+      setProfile(userData);
+    }} />;
   }
 
   return (
@@ -1124,9 +1109,7 @@ export default function App() {
 
       {activeSection === "dashboard" && (
         <Dashboard
-          counts={counts}
           events={events}
-          notifications={notifications}
           profile={profile}
           role={role}
         />
@@ -1134,19 +1117,18 @@ export default function App() {
       {activeSection === "team" && <OurTeam />}
       {activeSection === "events" && (
         <EventCalendar
-          appeals={appeals}
-          canManage={["MIC", "President", "Head of Media", "Coordinator"].includes(role)}
+          canManage={["MIC", "President", "Vice President", "Coordinator"].includes(role)}
           events={events}
-          notifications={notifications}
           profile={profile}
           role={role}
+          refreshEvents={fetchData}
         />
       )}
       {activeSection === "attendance" && (
-        <EventAttendance canManage={["MIC", "President", "Head of Media", "Coordinator", "Editor"].includes(role)} />
+        <EventAttendance events={events} profile={profile} />
       )}
       {activeSection === "inventory" && <InventoryManager />}
-      {activeSection === "dispatch" && <EquipmentDispatch />}
+      {activeSection === "dispatch" && <EquipmentDispatch events={events} profile={profile} />}
     </main>
   );
 }
